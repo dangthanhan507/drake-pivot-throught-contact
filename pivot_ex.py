@@ -31,13 +31,16 @@ if __name__ == '__main__':
     
     cube_width = 0.5
     sphere_radius = 0.05
-    box_instance = AddBox(plant, "object", lwh=(cube_width,cube_width,cube_width), mass=1.0, mu = 1.0, color=[1,0,0,1], hydro=True)
-    finger_instance = AddSphere(plant, "finger", radius=sphere_radius, mass=1.0, mu = 1, color=[0,1,0,1], hydro=True)
+    platform_height = 0.1
+    platform_instance = AddBox(plant,"platform", lwh=(5.0,5.0,platform_height), mass=1.0, mu = 1.0, color=[0,0,1,0.5], hydro=True)
+    box_instance = AddBox(plant, "object", lwh=(cube_width,cube_width,cube_width), mass=1.0, mu = 1.0, color=[1,0,0,0.5], hydro=False)
+    finger_instance = AddSphere(plant, "finger", radius=sphere_radius, mass=1.0, mu = 1, color=[0,1,0,0.5], hydro=False)
     
     # add prismatic joints on finger
     MakeControllableXYZ(plant, finger_instance, "finger_body")
     
     AddGround(plant)
+    plant.WeldFrames(plant.world_frame(), plant.GetFrameByName("platform_body", platform_instance), RigidTransform(RollPitchYaw(0.0,0.0,0.0), np.array([0,0,platform_height/2])))
     plant.Finalize()
     
     AddDefaultVisualization(builder, meshcat)
@@ -50,8 +53,8 @@ if __name__ == '__main__':
     simulator = Simulator(diagram)
     plant_context = plant.GetMyMutableContextFromRoot(simulator.get_mutable_context())
     
-    plant.SetFreeBodyPose(plant_context, plant.GetBodyByName("object_body"), RigidTransform(RotationMatrix.MakeZRotation(0), [0, 0, cube_width/2]))
-    plant.SetPositions(plant_context, finger_instance, np.array([0.0, 0.0, cube_width + sphere_radius]))
+    plant.SetFreeBodyPose(plant_context, plant.GetBodyByName("object_body"), RigidTransform(RotationMatrix.MakeZRotation(0), [0, 0, cube_width/2 + platform_height]))
+    plant.SetPositions(plant_context, finger_instance, np.array([0.0, 0.0, cube_width + sphere_radius + platform_height]))
     diagram.ForcedPublish(simulator.get_context())
     
     simulator.Initialize()
