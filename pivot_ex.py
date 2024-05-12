@@ -31,8 +31,11 @@ def decompose_manipulator_params(M: np.ndarray, C: np.ndarray, tau_g: np.ndarray
     return M_finger, M_object, C_finger, C_object, tau_g_finger, tau_g_object
 
 class PivotController(LeafSystem):
-    def __init__(self, plant: MultibodyPlant):
+    def __init__(self, plant: MultibodyPlant, obj_mass=1.0, cube_width=0.5):
         LeafSystem.__init__(self)
+        
+        self.obj_mass = obj_mass
+        self.cube_width = cube_width
         
         self.plant_context_ = plant.CreateDefaultContext()
         self.DeclareVectorInputPort("finger_state", 6)
@@ -50,28 +53,36 @@ class PivotController(LeafSystem):
         plant.SetFreeBodyPose(self.plant_context_, plant.GetBodyByName("object_body"), RigidTransform(obj_quat, obj_pos))
         plant.SetFreeBodySpatialVelocity(plant.GetBodyByName("object_body"), SpatialVelocity(obj_rotdot, obj_v), self.plant_context_)
         # calc Mass Matrix and Coriolis from context
-        M = plant.CalcMassMatrixViaInverseDynamics(plant_context)
-        C = plant.CalcBiasTerm(plant_context)
-        tau_g = plant.CalcGravityGeneralizedForces(plant_context)
+        M = plant.CalcMassMatrixViaInverseDynamics(self.plant_context_)
+        C = plant.CalcBiasTerm(self.plant_context_)
+        tau_g = plant.CalcGravityGeneralizedForces(self.plant_context_)
         M_finger, M_object, C_finger, C_object, tau_g_finger, tau_g_object = decompose_manipulator_params(M, C, tau_g)
         
         R_finger2world = RollPitchYaw(0.0,0.0,0.0).ToRotationMatrix().matrix()
         R_obj2world = RotationMatrix(obj_quat).matrix()
-        R_finger2obj = R_obj2world.T @ R_finger2world
         
         # calculate forces in finger frame
         # z_force is for
-        z_force = -2.0
+        z_force = -5.0
         
         # PID for controlling y rotation on object
         ry = RotationMatrix(obj_quat).ToRollPitchYaw().pitch_angle()
-        target_ry = np.pi/6
-        Kp = 1.0
-        Kd = 0.1
-        x_force = Kp * (target_ry - ry) + Kd * (0 - obj_rotdot[1])
+        target_ry = np.pi/12
+        roty = RotationMatrix.MakeYRotation(ry).matrix()
         
-        force = np.array([x_force, 0, z_force])
-        force = R_obj2world @ force # convert to world force which finger is in
+        #calculate CoM relative to pivot position
+        pivot_pos = roty @ np.array([-self.cube_width/2, 0, self.cube_width/2])
+        #calculate gravity torque on pivot position
+        tau_g_pivot = np.cross(np.array([0,0,-9.81]) * self.obj_mass, pivot_pos)
+        
+        print(f"{ry}/{target_ry}")
+        Kp = 30.0
+        Kd = 10.0
+        x_force = Kp * (target_ry - ry) + Kd * (0 - obj_rotdot[1]) + tau_g_pivot[1]
+        
+        desired_force = np.array([x_force, 0, z_force])
+        
+        force = R_obj2world @ desired_force # convert to world force which finger is in
         
         output.SetFromVector(force)
         pass
@@ -121,7 +132,7 @@ if __name__ == '__main__':
     AddDefaultVisualization(builder, meshcat)
     
     # zero_input = builder.AddSystem(ConstantVectorSource([0, 0, 0]))
-    controller = builder.AddSystem(PivotController(plant))
+    controller = builder.AddSystem(PivotController(plant, box_mass, cube_width))
     builder.Connect(plant.get_state_output_port(finger_instance), controller.get_input_port(0))
     builder.Connect(plant.get_state_output_port(box_instance), controller.get_input_port(1))
     builder.Connect(controller.get_output_port(), plant.get_actuation_input_port(finger_instance))
@@ -138,7 +149,7 @@ if __name__ == '__main__':
     simulator.Initialize()
     simulator.set_target_realtime_rate(1.0)
     meshcat.StartRecording()
-    simulator.AdvanceTo(1.0)
+    simulator.AdvanceTo(10.0)
     meshcat.StopRecording()
     meshcat.PublishRecording()
     input()
