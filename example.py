@@ -28,9 +28,11 @@ if __name__ == '__main__':
     parser = Parser(plant, scene_graph)
     
     
-    # model = parser.AddModels("bubble.sdf")[0]
-    model = parser.AddModelsFromUrl("package://drake_models/wsg_50_description/sdf/schunk_wsg_50_hydro_bubble.sdf")[0]
-    print(model)
+    # model = parser.AddModelsFromUrl("package://drake_models/wsg_50_description/sdf/schunk_wsg_50_hydro_bubble.sdf")[0]
+    # model = parser.AddModelsFromUrl("package://drake_models/wsg_50_description/sdf/schunk_wsg_50_deformable_bubble.sdf")[0] # does not specify deformable, must be added with drake code
+    
+    model = parser.AddModels("wsg_50_description/sdf/schunk_wsg_50_hydro_bubble.sdf")[0]
+    
     plant.Finalize()
     
     AddDefaultVisualization(builder, meshcat)
@@ -44,6 +46,8 @@ if __name__ == '__main__':
     diagram.ForcedPublish(context)
     context.SetTime(0.0)
     
+    #print number of plant positions
+    # plant.SetPositions(plant_context, plant.GetModelInstanceByName("Schunk_Gripper"), np.zeros(3))
     plant.SetFreeBodyPose(plant_context, plant.GetBodyByName("gripper"), RigidTransform(RotationMatrix.MakeZRotation(np.pi/2), [0, 0, 0.5]))
     
     diagram.ForcedPublish(context)
